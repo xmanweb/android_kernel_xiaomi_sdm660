@@ -49,11 +49,11 @@ on:
         description: '开启 ReSukiSU 功能模块'
         required: true
         type: boolean
-        default: false
+        default: true
       hook_type:
         description: '选择 ReSukiSU 挂钩类型 (二选一)'
         required: true
-        default: 'manual_hook'
+        default: 'inline_susfs'
         type: choice
         options:
           - 'inline_susfs'
@@ -77,8 +77,8 @@ env:
   # 动态分支计算
   BUILD_BRANCH: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.branch || github.ref_name }}
   # 外部开关与挂钩模式转环境变量
-  RUN_KSU_SUSFS: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.enable_ksu_susfs || 'false' }}
-  HOOK_TYPE: ${{ github.event.inputs.hook_type || 'manual_hook' }}
+  RUN_KSU_SUSFS: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.enable_ksu_susfs || 'true' }}
+  HOOK_TYPE: ${{ github.event.inputs.hook_type || 'inline_susfs' }}
   RUN_DROIDSPACES: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.enable_droidspaces || 'false' }}
 
 jobs:
@@ -454,7 +454,7 @@ jobs:
 
           echo "=== 正在生成配置树: $DEFCONFIG | LTO 模式: $LTO_MODE ==="
           
-          make O="$OUT_DIR" "${TOOLCHAIN_ARGS[@]}" vendor/sdm660-perf_defconfig vendor/xiaomi/sdm660_defconfig "$DEFCONFIG"
+          make O="$OUT_DIR" "${TOOLCHAIN_ARGS[@]}" vendor/sdm660-perf_defconfig vendor/xiaomi/sdm660.config "$DEFCONFIG"
           
           # 根据 Hook 类型动态追写宏定义
           CONFIG_ARGS=()
