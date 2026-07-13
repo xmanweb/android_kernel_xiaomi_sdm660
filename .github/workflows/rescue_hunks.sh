@@ -89,109 +89,61 @@ if [ -f "$NAMESPACE_FILE" ]; then
 fi
 
 # ---------------------------------------------------------------------
-# 2. 修复 fs/proc/cmdline.c (适配带有 IGNORE_SKIP_FLAG 的 4.19 树)
+# 2. 修复 fs/proc/task_mmu.c (函数级状态机隔离，精准防误伤)
 # ---------------------------------------------------------------------
-CMDLINE_FILE="fs/proc/cmdline.c"
-if [ -f "$CMDLINE_FILE" ]; then
-    echo "[+] Patching $CMDLINE_FILE (Injecting top-level cmdline spoof hook)..."
-    
-    awk '
-    BEGIN { 
-        header_added = 0; 
-        in_func = 0;
-    }
+TASK_MMU_FILE="fs/proc/task_mmu.c"
+if [ -f "$TASK_MMU_FILE" ]; then
+    echo "[+] Patching $TASK_MMU_FILE (Injecting SUSFS SUS_MAP core hooks with strict function isolation)..."
 
-    # 1. 在函数外层上方注入 extern 声明
-    /static int cmdline_proc_show/ {
-        if (!header_added) {
-            print "#ifdef CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG"
-            print "extern struct static_key_false susfs_is_fake_cmdline_or_bootconfig_buffer_set;"
-            print "extern void susfs_spoof_cmdline_or_bootconfig(struct seq_file *m);"
-            print "#endif"
-            print ""
-            header_added = 1
-        }
-        in_func = 1
-        print $0
-        next
-    }
-
-    # 2. 匹配到函数入口的左大括号，紧跟其后注入劫持逻辑
-    /^{/ {
-        print $0
-        if (in_func == 1) {
-            print "#ifdef CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG"
-            print "\tif (static_branch_likely(&susfs_is_fake_cmdline_or_bootconfig_buffer_set)) {"
-            print "\t\tsusfs_spoof_cmdline_or_bootconfig(m);"
-            print "\t\tseq_putc(m, \x27\\n\x27);"
-            print "\t\treturn 0;"
-            print "\t}"
-            print "#endif"
-            in_func = 0 # 注入完成，关闭状态机
-        }
-        next
-    }
-
-    # 兜底防止状态机未闭合
-    /^}/ {
-        in_func = 0
-    }
-
-    { print }
-    ' "$CMDLINE_FILE" > "${CMDLINE_FILE}.tmp" && mv "${CMDLINE_FILE}.tmp" "$CMDLINE_FILE" # <-- ✅ 这里已修正为 CMDLINE_FILE
-
-    echo "[+] $CMDLINE_FILE patched successfully at function entrance."
-fi
-
-# ---------------------------------------------------------------------
-# 3. 修复 fs/proc/task_mmu.c (函数级状态机隔离，精准防误伤)
-# ---------------------------------------------------------------------
-
-# 定义源码文件
-TARGET_FILE="fs/proc/task_mmu.c"
-if [ -f "$TARGET_FILE" ]; then
-    # 使用 awk 状态机进行精准修复
     awk '
     BEGIN {
-        state = 0; 
+        in_pagemap = 0;  # 核心防火墙：只有在 pagemap_read 函数内才允许修改
     }
-    
-    # 状态 0：寻找锚点行
-    state == 0 && $0 ~ /#include <linux\/mm_inline\.h>/ {
+
+    # 1. 捕捉且仅捕捉 pagemap_read 函数入口，开启隔离结界
+    /static ssize_t pagemap_read\(struct file \*file/ {
+        in_pagemap = 1;
         print $0;
-        state = 1;
         next;
     }
-    
-    # 状态 1：在锚点后寻找合适的插入位置（比如接下来的空行或者 asm 包含线）
-    state == 1 {
-        # 匹配到空行，或者匹配到接下来的 asm 包含，说明可以在此插入
-        if ($0 ~ /^$/ || $0 ~ /#include <asm\/elf\.h>/) {
-            print "#if defined(CONFIG_KSU_SUSFS_SUS_KSTAT) || defined(CONFIG_KSU_SUSFS_SUS_MAP) || defined(CONFIG_KSU_SUSFS_OPEN_REDIRECT)";
-            print "#include <linux/susfs_def.h>";
-            print "#endif // #if defined(CONFIG_KSU_SUSFS_SUS_KSTAT) || defined(CONFIG_KSU_SUSFS_SUS_MAP) || defined(CONFIG_KSU_SUSFS_OPEN_REDIRECT)";
-            
-            # 如果当前是空行，补一个空行保持格式整洁
-            if ($0 ~ /^$/) {
-                print "";
-            }
-            
-            # 如果当前已经是 #include <asm/elf.h>，记得把当前行也打印出来
-            if ($0 ~ /#include <asm\/elf\.h>/) {
-                print $0;
-            }
-            
-            state = 2; # 切换到完成状态
-            next;
+
+    # 2. 精准捕捉 pagemap_read 内部的 mmap 锁流程
+    /ret = mmap_read_lock_killable\(mm\);/ {
+        print $0                     # 1. print: ret = mmap_read_lock_killable(mm);
+        getline line2; print line2   # 2. print: if (ret)
+        getline line3; print line3   # 3. print:     goto out_free;
+        
+        # 只有在隔离结界内，才允许注入核心逻辑
+        if (in_pagemap == 1) {
+            print "#ifdef CONFIG_KSU_SUSFS_SUS_MAP"
+            print "\t\tvma = find_vma(mm, start_vaddr);"
+            print "\t\tif (vma && vma->vm_file && SUSFS_IS_INODE_SUS_MAP(file_inode(vma->vm_file)))"
+            print "\t\t\tgoto bypass_orig_flow;"
+            print "#endif"
+            in_pagemap = 0           # 注入成功后立刻提前关闭结界，防止下方别的位置误触发
         }
+        next;
     }
-    
-    # 默认状态：原样输出所有行
-    {
-        print $0;
+
+    # 3. 精准捕捉 pagemap_read 内部的 walk_page_range 调用
+    /ret = walk_page_range\(start_vaddr, end, &pagemap_walk\);/ {
+        print $0                     # print: ret = walk_page_range(...);
+        print "#ifdef CONFIG_KSU_SUSFS_SUS_MAP"
+        print "bypass_orig_flow:"
+        print "#endif"
+        next;
     }
-    ' "$TARGET_FILE" > "${TARGET_FILE}.tmp" && mv "${TARGET_FILE}.tmp" "$TARGET_FILE"
-    echo "[+] $TARGET_FILE patched successfully ."
+
+    # 4. 遇到任何函数的右大括号，安全闭合状态机
+    /^}/ {
+        in_pagemap = 0;
+    }
+
+    # 5. 兜底流：其余行原样输出
+    { print }
+    ' "$TASK_MMU_FILE" > "${TASK_MMU_FILE}.tmp" && mv "${TASK_MMU_FILE}.tmp" "$TASK_MMU_FILE"
+
+    echo "[+] $TASK_MMU_FILE patched successfully with strict pagemap_read isolation."
 fi
 
 
