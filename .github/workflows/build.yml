@@ -425,6 +425,13 @@ jobs:
               cat "$LEGACY_DIR/common/Makefile" | grep "ccflags-y"
             fi
           fi
+          
+          ISP_SOURCE="drivers/media/platform/msm/camera_v2-legacy/isp/msm_isp.c"
+          if [ -f "$ISP_SOURCE" ]; then
+            echo "[+] 🛠️ 正在修复 msm_isp.c 中的 vm_fault_t 函数签名历史冲突..."
+            sed -i 's/static int isp_vma_fault/static vm_fault_t isp_vma_fault/g' "$ISP_SOURCE"
+            echo "[+] ISP 驱动函数签名升级完成！"
+          fi
          
           mkdir -p "$OUT_DIR"
 
