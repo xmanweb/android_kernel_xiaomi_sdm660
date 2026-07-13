@@ -3,7 +3,7 @@ name: "Custom Kernel 4.19 for whyred"
 on:
   push:
     branches:
-      - lineage-20
+      - lineage-23.2
   workflow_dispatch:
     inputs:
       branch:
