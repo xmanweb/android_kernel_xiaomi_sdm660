@@ -419,6 +419,7 @@ jobs:
           
           echo "[+] Reverting commit d24cac2 to prevent duplicate case errors..."
           # --no-edit 表示使用默认的 Revert Commit Message，不需要人工交互确认
+          git fetch --depth=20 origin d24cac29f6cc473a61d01788ba181475dcf3ab60
           git revert --no-edit d24cac29f6cc473a61d01788ba181475dcf3ab60
          
           mkdir -p "$OUT_DIR"
