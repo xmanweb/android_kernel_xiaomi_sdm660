@@ -413,7 +413,13 @@ jobs:
           START_TIME=$(date +%s)
           cd "$KERNEL_DIR"
 
+          # 配置临时全局用户，防止 git revert 因为缺少身份信息而报错
+          git config --local user.email "bot@example.com"
+          git config --local user.name "Kernel Bot"
           
+          echo "[+] Reverting commit d24cac2 to prevent duplicate case errors..."
+          # --no-edit 表示使用默认的 Revert Commit Message，不需要人工交互确认
+          git revert --no-edit d24cac2
          
           mkdir -p "$OUT_DIR"
 
