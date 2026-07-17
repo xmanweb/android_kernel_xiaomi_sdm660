@@ -479,6 +479,8 @@ jobs:
             -e FAIR_GROUP_SCHED
             -e RT_GROUP_SCHED
             -e DEFAULT_USE_ENERGY_AWARE
+            -e PSTORE_LZO_COMPRESS_DEFAULT
+            -e SCHED_TUNE
             )
             
           if [ "${{ env.RUN_KSU_SUSFS }}" = "true" ]; then
@@ -512,7 +514,7 @@ jobs:
           fi
 
           echo "=== 🔎 检查当前即将参与编译的 .config 核心宏 ==="
-          grep -E "_KSU|_SUSFS|THREAD_INFO|PSTORE|BUILD_ARM64_DT_OVERLAY|SERIAL|KERNEL_LZMA|GROUP" "$OUT_DIR/.config" || true
+          grep -E "_KSU|_SUSFS|THREAD_INFO|PSTORE|BUILD_ARM64_DT_OVERLAY|SERIAL|KERNEL_LZMA|GROUP|SCHED_TUNE" "$OUT_DIR/.config" || true
           echo "==============================================="
 
           # 开始多线程并行构建
