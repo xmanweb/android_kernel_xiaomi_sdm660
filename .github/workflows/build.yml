@@ -48,7 +48,7 @@ on:
         description: '开启 ReSukiSU 功能模块'
         required: true
         type: boolean
-        default: true
+        default: false
       hook_type:
         description: '选择 ReSukiSU 挂钩类型 (二选一)'
         required: true
@@ -76,7 +76,7 @@ env:
   # 动态分支计算
   BUILD_BRANCH: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.branch || 'lineage-23.2' }}
   # 外部开关与挂钩模式转环境变量
-  RUN_KSU_SUSFS: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.enable_ksu_susfs || 'true' }}
+  RUN_KSU_SUSFS: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.enable_ksu_susfs || 'false' }}
   HOOK_TYPE: ${{ github.event.inputs.hook_type || 'inline_susfs' }}
   RUN_DROIDSPACES: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.enable_droidspaces || 'false' }}
 
@@ -465,7 +465,19 @@ jobs:
           make O="$OUT_DIR" "${TOOLCHAIN_ARGS[@]}" vendor/sdm660-perf_defconfig vendor/xiaomi/sdm660-common.config "$DEFCONFIG"
           
           # 根据 Hook 类型动态追写宏定义
-          CONFIG_ARGS=()
+          CONFIG_ARGS=(
+            -e PSTORE
+            -e PSTORE_CONSOLE
+            -e PSTORE_PMSG
+            -e PSTORE_RAM
+            -e PSTORE_COMPRESS
+            -e PSTORE_LZO_COMPRESS
+            -e SERIAL_MSM
+            -e SERIAL_MSM_CONSOLE
+            -d KERNEL_GZIP
+            -e KERNEL_LZMA
+            )
+            
           if [ "${{ env.RUN_KSU_SUSFS }}" = "true" ]; then
             # 基础 KSU 常规宏
             CONFIG_ARGS+=(-e KSU -e KSU_MULTI_MANAGER_SUPPORT )
@@ -497,7 +509,7 @@ jobs:
           fi
 
           echo "=== 🔎 检查当前即将参与编译的 .config 核心宏 ==="
-          grep -E "_KSU|_SUSFS" "$OUT_DIR/.config" || true
+          grep -E "_KSU|_SUSFS|THREAD_INFO|PSTORE|BUILD_ARM64_DT_OVERLAY|SERIAL|KERNEL_LZMA" "$OUT_DIR/.config" || true
           echo "==============================================="
 
           # 开始多线程并行构建
