@@ -14,7 +14,26 @@
 &firmware {
 	android {
 		/delete-node/ vbmeta;
-		/delete-node/ fstab;
+		fstab {
+			compatible = "android,fstab";
+			vendor {
+				compatible = "android,vendor";
+				dev = "/dev/block/mapper/vendor";
+				type = "erofs";
+				mnt_flags = "ro,barrier=1";
+				fsmgr_flags = "wait,slotselect,logical,first_stage_mount";
+				status = "ok";
+			};
+
+			system {
+				compatible = "android,system";
+				dev = "/dev/block/mapper/system";
+				type = "erofs";
+				mnt_flags = "ro,barrier=1";
+				fsmgr_flags = "wait,slotselect,logical,first_stage_mount";
+				status = "ok";
+			};
+		};
 	};
 };
 
