@@ -476,6 +476,9 @@ jobs:
             -e SERIAL_MSM_CONSOLE
             -d KERNEL_GZIP
             -e KERNEL_LZMA
+            -e FAIR_GROUP_SCHED
+            -e RT_GROUP_SCHED
+            -e DEFAULT_USE_ENERGY_AWARE
             )
             
           if [ "${{ env.RUN_KSU_SUSFS }}" = "true" ]; then
@@ -509,7 +512,7 @@ jobs:
           fi
 
           echo "=== 🔎 检查当前即将参与编译的 .config 核心宏 ==="
-          grep -E "_KSU|_SUSFS|THREAD_INFO|PSTORE|BUILD_ARM64_DT_OVERLAY|SERIAL|KERNEL_LZMA" "$OUT_DIR/.config" || true
+          grep -E "_KSU|_SUSFS|THREAD_INFO|PSTORE|BUILD_ARM64_DT_OVERLAY|SERIAL|KERNEL_LZMA|GROUP" "$OUT_DIR/.config" || true
           echo "==============================================="
 
           # 开始多线程并行构建
