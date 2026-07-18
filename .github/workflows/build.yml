@@ -480,7 +480,8 @@ jobs:
             -e RT_GROUP_SCHED
             -e DEFAULT_USE_ENERGY_AWARE
             -e PSTORE_LZO_COMPRESS_DEFAULT
-            -e SCHED_TUNE
+            -d SCHED_TUNE
+            -d CGROUP_SCHED
             )
             
           if [ "${{ env.RUN_KSU_SUSFS }}" = "true" ]; then
